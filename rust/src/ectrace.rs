@@ -87,8 +87,6 @@ pub(crate) struct Stats {
     rows: [AtomicU64; OPS],
     keys: Mutex<HashMap<String, u64>>,
     updates: AtomicU64,
-    resolved: AtomicU64,
-    lagging: AtomicU64,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -96,8 +94,6 @@ pub(crate) struct Snapshot {
     calls: [u64; OPS],
     rows: [u64; OPS],
     updates: u64,
-    resolved: u64,
-    lagging: u64,
 }
 
 impl Snapshot {
@@ -116,8 +112,6 @@ impl Snapshot {
     pub(crate) fn since(&self, earlier: &Snapshot) -> Snapshot {
         let mut out = Snapshot {
             updates: self.updates.saturating_sub(earlier.updates),
-            resolved: self.resolved.saturating_sub(earlier.resolved),
-            lagging: self.lagging.saturating_sub(earlier.lagging),
             ..Snapshot::default()
         };
         for i in 0..OPS {
@@ -135,9 +129,6 @@ impl Snapshot {
             .collect();
         if self.updates > 0 {
             parts.push(format!("room_updates={}", self.updates));
-        }
-        if self.resolved > 0 || self.lagging > 0 {
-            parts.push(format!("redecrypted={} lagging={}", self.resolved, self.lagging));
         }
         parts.join(" ")
     }
@@ -164,8 +155,6 @@ impl Stats {
     pub(crate) fn snapshot(&self) -> Snapshot {
         let mut out = Snapshot {
             updates: self.updates.load(Ordering::Relaxed),
-            resolved: self.resolved.load(Ordering::Relaxed),
-            lagging: self.lagging.load(Ordering::Relaxed),
             ..Snapshot::default()
         };
         for i in 0..OPS {
@@ -385,38 +374,22 @@ impl<T: EventCacheStore> EventCacheStore for Counted<T> {
     }
 }
 
-/// Counts the SDK's per-room cache updates and redecryption reports into `stats`.
+/// Counts the SDK's per-room event cache updates into `stats`.
 pub(crate) fn watch_client(client: &matrix_sdk::Client, stats: Arc<Stats>) {
-    use futures_util::StreamExt;
     use tokio::sync::broadcast::error::RecvError;
     let Ok(runtime) = tokio::runtime::Handle::try_current() else { return };
     let mut updates = client.event_cache().subscribe_to_room_generic_updates();
-    let update_stats = Arc::clone(&stats);
     runtime.spawn(async move {
         loop {
             match updates.recv().await {
                 Ok(update) => {
-                    update_stats.updates.fetch_add(1, Ordering::Relaxed);
-                    update_stats.note_key(format!("room_update {}", redact(update.room_id.as_str())));
+                    stats.updates.fetch_add(1, Ordering::Relaxed);
+                    stats.note_key(format!("room_update {}", redact(update.room_id.as_str())));
                 }
                 Err(RecvError::Lagged(missed)) => {
-                    update_stats.updates.fetch_add(missed, Ordering::Relaxed);
+                    stats.updates.fetch_add(missed, Ordering::Relaxed);
                 }
                 Err(RecvError::Closed) => break,
-            }
-        }
-    });
-    let mut reports = Box::pin(client.event_cache().subscribe_to_decryption_reports());
-    runtime.spawn(async move {
-        use matrix_sdk::event_cache::RedecryptorReport;
-        while let Some(report) = reports.next().await {
-            match report {
-                Ok(RedecryptorReport::ResolvedUtds { events, .. }) => {
-                    stats.resolved.fetch_add(events.len() as u64, Ordering::Relaxed);
-                }
-                _ => {
-                    stats.lagging.fetch_add(1, Ordering::Relaxed);
-                }
             }
         }
     });
