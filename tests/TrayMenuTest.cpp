@@ -6,9 +6,13 @@
 #include <QImage>
 #include <QMenu>
 #include <QPixmap>
+#include <QGuiApplication>
 #include <QSignalSpy>
 #include <QSystemTrayIcon>
 #include <QTest>
+
+#include <algorithm>
+#include <cmath>
 
 #include "app/CloseBehavior.h"
 #include "app/TrayIcon.h"
@@ -41,6 +45,41 @@ private slots:
         show->trigger();
         QCOMPARE(shown.count(), 1);
         QCOMPARE(quitting.count(), 1);
+    }
+
+    void theMenuFollowsTheSystemColourSchemeWhateverTheAppThemeIs()
+    {
+        QPalette themed;
+        themed.setColor(QPalette::Window, QColor(0xfa, 0xfa, 0xfa));
+        themed.setColor(QPalette::WindowText, QColor(0x10, 0x10, 0x10));
+        themed.setColor(QPalette::ButtonText, QColor(0x10, 0x10, 0x10));
+        themed.setColor(QPalette::Text, QColor(0x10, 0x10, 0x10));
+        QGuiApplication::setPalette(themed);
+        const auto lum = [](const QColor &c) {
+            const auto ch = [](qreal v) {
+                return v <= 0.03928 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * ch(c.redF()) + 0.7152 * ch(c.greenF()) + 0.0722 * ch(c.blueF());
+        };
+        const auto contrast = [&](const QColor &a, const QColor &b) {
+            const qreal x = lum(a), y = lum(b);
+            return (std::max(x, y) + 0.05) / (std::min(x, y) + 0.05);
+        };
+        TrayIcon tray;
+        QMenu *menu = tray.contextMenu();
+        for (const Qt::ColorScheme scheme :
+             { Qt::ColorScheme::Dark, Qt::ColorScheme::Light }) {
+            tray.applyMenuColorScheme(scheme);
+            const QPalette pal = menu->palette();
+            for (const QPalette::ColorRole ink :
+                 { QPalette::WindowText, QPalette::Text, QPalette::ButtonText })
+                QVERIFY2(contrast(pal.color(QPalette::Active, ink),
+                                  pal.color(QPalette::Active, QPalette::Window)) >= 7.0,
+                         qPrintable(QStringLiteral("scheme %1 role %2")
+                                        .arg(int(scheme)).arg(int(ink))));
+            const bool darkWindow = lum(pal.color(QPalette::Window)) < 0.2;
+            QCOMPARE(darkWindow, scheme == Qt::ColorScheme::Dark);
+        }
     }
 
     void theTooltipSaysUnreadInTheDotOnlyState()

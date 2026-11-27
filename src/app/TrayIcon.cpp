@@ -11,6 +11,8 @@
 #include <QPixmap>
 #include <QImage>
 #include <QPixmap>
+#include <QPalette>
+#include <QStyleHints>
 #include <QAction>
 #include <QMenu>
 #include <QApplication>
@@ -206,11 +208,51 @@ void TrayIcon::setEnabled(bool enabled)
     m_icon->show();
 }
 
+QPalette TrayIcon::menuPalette(Qt::ColorScheme scheme)
+{
+    QPalette pal;
+    const bool dark = scheme == Qt::ColorScheme::Dark;
+    const QColor window = dark ? QColor(0x2b, 0x2b, 0x2b) : QColor(0xf5, 0xf5, 0xf5);
+    const QColor ink = dark ? QColor(0xf0, 0xf0, 0xf0) : QColor(0x1f, 0x1f, 0x1f);
+    const QColor highlight = dark ? QColor(0x3a, 0x5f, 0xa8) : QColor(0xcc, 0xe4, 0xf7);
+    const QColor disabled = dark ? QColor(0x95, 0x95, 0x95) : QColor(0x6b, 0x6b, 0x6b);
+    for (const QPalette::ColorRole role :
+         { QPalette::Window, QPalette::Base, QPalette::Button })
+        pal.setColor(role, window);
+    for (const QPalette::ColorRole role :
+         { QPalette::WindowText, QPalette::Text, QPalette::ButtonText })
+        pal.setColor(role, ink);
+    pal.setColor(QPalette::Highlight, highlight);
+    pal.setColor(QPalette::HighlightedText, ink);
+    for (const QPalette::ColorRole role :
+         { QPalette::WindowText, QPalette::Text, QPalette::ButtonText })
+        pal.setColor(QPalette::Disabled, role, disabled);
+    return pal;
+}
+
+void TrayIcon::applyMenuPalette()
+{
+    applyMenuColorScheme(QGuiApplication::styleHints()->colorScheme());
+}
+
+void TrayIcon::applyMenuColorScheme(Qt::ColorScheme scheme)
+{
+    if (!m_menu)
+        return;
+    if (scheme == Qt::ColorScheme::Unknown)
+        m_menu->setPalette(QPalette());
+    else
+        m_menu->setPalette(menuPalette(scheme));
+}
+
 QMenu *TrayIcon::contextMenu()
 {
     if (m_menu)
         return m_menu.get();
     m_menu = std::make_unique<QMenu>();
+    applyMenuPalette();
+    connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
+            this, &TrayIcon::applyMenuPalette);
     m_showAction = m_menu->addAction(tr("Show Lightning"));
     connect(m_showAction, &QAction::triggered, this, &TrayIcon::showRequested);
     m_menu->addSeparator();

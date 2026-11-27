@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPalette>
 #include <QPixmap>
 #include <QString>
 
@@ -59,6 +60,8 @@ public:
     static QImage balloonImage(const QImage &avatar);
 
     QMenu *contextMenu();
+    static QPalette menuPalette(Qt::ColorScheme scheme);
+    void applyMenuColorScheme(Qt::ColorScheme scheme);
     static bool activationShowsWindow(int reason);
     static bool activationOpensOwnMenu(int reason, bool nativeMenu);
     // The reason the activated handler acts on. On macOS a Control-click is
@@ -91,6 +94,8 @@ private:
     void hideNativeBalloon();
     void *m_balloonIcon = nullptr;
 #endif
+
+    void applyMenuPalette();
 
     QSystemTrayIcon *m_icon = nullptr;
     std::unique_ptr<QMenu> m_menu;
