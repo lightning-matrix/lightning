@@ -123,6 +123,7 @@ async fn wait_for(events: &EventQueue, kind: &str) {
 async fn idle_reads(stats: &Stats) -> (Snapshot, String) {
     tokio::time::sleep(Duration::from_millis(1500)).await;
     let before = stats.snapshot();
+    assert!(before.reads() > 0, "the probe saw no store reads at all, so it cannot see a storm");
     let _ = stats.take_top();
     tokio::time::sleep(IDLE).await;
     let delta = stats.snapshot().since(&before);
