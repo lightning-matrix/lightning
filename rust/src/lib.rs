@@ -82,6 +82,7 @@ mod discover;
 mod gifs;
 mod ignore;
 mod iotrace;
+mod ectrace;
 mod labs;
 mod bgsession;
 mod pushrules;
@@ -11987,6 +11988,7 @@ fn install_ui_event_handlers(client: &Client, events: Arc<Mutex<VecDeque<String>
     serveradmin::install_deleted_room_handler(client, Arc::clone(&events));
 
     iotrace::start_if_enabled(Arc::clone(&events));
+    ectrace::start_if_enabled(client, Arc::clone(&events));
 
     let power_level_events = Arc::clone(&events);
     client.add_event_handler(move |_ev: SyncRoomPowerLevelsEvent, room: Room| {

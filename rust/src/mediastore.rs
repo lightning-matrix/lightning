@@ -620,10 +620,16 @@ pub(crate) async fn open_account_stores_with(
     probe.store("state", &state);
     probe.store("event_cache", &event_cache);
     probe.store("crypto", &crypto);
-    let store_config = StoreConfig::new(lock_config)
-        .state_store(state)
-        .event_cache_store(event_cache)
-        .crypto_store(crypto);
+    let store_config = StoreConfig::new(lock_config).state_store(state);
+    let store_config = if crate::ectrace::enabled() {
+        store_config.event_cache_store(Arc::new(crate::ectrace::Counted::new(
+            event_cache,
+            crate::ectrace::global(),
+        )))
+    } else {
+        store_config.event_cache_store(event_cache)
+    };
+    let store_config = store_config.crypto_store(crypto);
     Ok(match media {
         OpenedMedia::Sqlite(store) => {
             let store = Arc::new(store);

@@ -10686,6 +10686,10 @@ mod edit_regression_tests;
 mod unread_receipt_tests;
 
 #[cfg(test)]
+#[path = "eventcache_read_tests.rs"]
+mod eventcache_read_tests;
+
+#[cfg(test)]
 mod start_check_claim_tests {
     use super::TimelineRegistry;
     use std::collections::VecDeque;
